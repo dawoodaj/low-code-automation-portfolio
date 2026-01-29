@@ -1,0 +1,86 @@
+{
+  "name": "FinTech KYC Identity Verification",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.internal-db.com/v1/new-signups",
+        "method": "GET",
+        "authentication": "headerAuth"
+      },
+      "name": "Fetch New Users",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json[\"risk_score\"]}}",
+              "value2": true
+            }
+          ],
+          "number": [
+            {
+              "value1": "={{$json[\"document_validity\"]}}",
+              "operation": "larger",
+              "value2": 80
+            }
+          ]
+        }
+      },
+      "name": "Risk Engine Logic",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "channel": "compliance-alerts",
+        "text": "🚨 AML HIT: User {{$json[\"user_id\"]}} matches sanctions list."
+      },
+      "name": "Slack Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [850, 200]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "users",
+        "columns": "status",
+        "value": "verified"
+      },
+      "name": "Approve User",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [850, 400]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [[{ "node": "Fetch New Users", "type": "main", "index": 0 }]]
+    },
+    "Fetch New Users": {
+      "main": [[{ "node": "Risk Engine Logic", "type": "main", "index": 0 }]]
+    },
+    "Risk Engine Logic": {
+      "main": [
+        [{ "node": "

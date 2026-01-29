@@ -1,0 +1,71 @@
+{
+  "scenario": {
+    "name": "GDPR - PII Auto-Anonymizer",
+    "description": "Listens for account deletion requests and wipes data from CRM and Logistics DB.",
+    "modules": [
+      {
+        "id": 1,
+        "module": "webhook:WatchWebhook",
+        "parameters": {
+          "hook": "gdpr-request-listener"
+        },
+        "mapper": {
+          "user_id": "email"
+        }
+      },
+      {
+        "id": 2,
+        "module": "google-sheets:SearchRows",
+        "parameters": {
+          "sheetId": "CRM_Database",
+          "query": "email = {{1.email}}"
+        }
+      },
+      {
+        "id": 3,
+        "module": "openai:CreateCompletion",
+        "parameters": {
+          "model": "gpt-4o",
+          "prompt": "Verify if this deletion request for {{1.email}} is legally valid based on EU Law Art. 17."
+        }
+      },
+      {
+        "id": 4,
+        "module": "router:Router",
+        "flow": [
+          {
+            "filter": "Legal_Valid = true",
+            "modules": [
+              {
+                "module": "salesforce:DeleteObject",
+                "parameters": {
+                  "type": "Contact",
+                  "id": "{{2.salesforce_id}}"
+                }
+              },
+              {
+                "module": "slack:PostMessage",
+                "parameters": {
+                  "text": "✅ GDPR Compliance: User {{1.email}} wiped successfully."
+                }
+              }
+            ]
+          },
+          {
+            "filter": "Legal_Valid = false",
+            "modules": [
+              {
+                "module": "email:SendEmail",
+                "parameters": {
+                  "to": "{{1.email}}",
+                  "subject": "Deletion Request Rejected",
+                  "body": "Your request cannot be processed due to pending invoices."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
